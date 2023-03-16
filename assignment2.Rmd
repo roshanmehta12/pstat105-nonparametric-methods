@@ -22,8 +22,6 @@ library(ggplot2)
 
 a)
 ```{r}
-#setwd("/Users/roshanmehta/Downloads/PSTAT/PSTAT 105/pstat105-nonparametric-methods/data_files")
-
 ## Reading in the entire data file with some special
 ## formatting to interpret the birthday dates correctly
 BasketBDays <- read_csv("https://github.com/roshanmehta12/pstat105-nonparametric-methods/raw/main/data_files/Basketball_Reference_BDays.txt", 
@@ -41,6 +39,7 @@ BasketBDays$Day <- format(BasketBDays$`Birth Date`,format="%d")
 ## count is a tidyverse function which tabulates the outcomes
 BBall.table <- BasketBDays %>% count(Month)
 ```
+
 Here is the data tabulated by month.
 $$
 \begin{array}{ccccccc}
@@ -143,7 +142,8 @@ $$
 This leads us to another version of the $\chi^2$ test.
 ```{r}
 n <- sum(BBTableMnths.modern$n)
-pc = c(0.0815 , 0.0752 , 0.0837 , 0.0816 , 0.0859 , 0.0813,0.0883 , 0.0892 , 0.0866 , 0.0849 , 0.0787 , 0.0831)
+pc = c(0.0815, 0.0752, 0.0837, 0.0816, 0.0859, 0.0813, 
+       0.0883, 0.0892, 0.0866, 0.0849, 0.0787, 0.0831)
 chisq.test(BBTableMnths.modern$n,p=pc)
 ```
 This test is once again further from our data, but not to a statistically significant degree.
@@ -166,41 +166,101 @@ Figure 3 shows a comparison from this last test between which months the players
 
 
 # 2 - Selling times data
+The data set `Selltimes.txt` consists of the time that elapsed between when sell orders for CISCO stock were placed during April 5, 2010. My hypothesis is that these times have an exponential distribution with CDF $F(t)=1-\mathrm{e}^{-\lambda t}$ for some unknown rate $\lambda$. (`R` has a function `pexp` that calculates these exponential probabilities.)
+
+```{r, warning=FALSE}
+setwd("/Users/roshanmehta/Downloads/PSTAT/PSTAT 105/pstat105-nonparametric-methods/data_files")
+selltimes <- scan("selltimes.txt")
+```
+
+a) Histogram of the data with appropriate number of bins.
+```{r}
+hist(selltimes, breaks=300, xlab="Time", 
+     main="Histogram of Times between Sales", col="green")
+```
+Figure 4:  A histogram of all the selling times that shows a high degree of skewness in the data.
+```{r}
+hist(selltimes[selltimes < 200], breaks=100, xlab="Time", 
+     main="Histogram of Times Less than 200", col="green")
+```
+Figure 5:  The time between sales for the 272 sales that happened within 200 seconds.
+```{r}
+hist(selltimes[selltimes < 1], breaks=50, xlab="Time", 
+     main="Histogram of Times Less than 1 sec.", col="green")
+```
+Figure 6: A histogram with 50 bins showing only the really short durations of less than 1 second.
+
+We could produce a histogram of this data with 300 bins as in Figure 4, but what we notice is that there are a lot of observations near 0 and a few observations a long way out in the tails. We could try to get a better picture of the behavior near 0 by looking at only the shorter times. The histogram in Figure 5 shows only the times less than 200 seconds, and you can see that this is a little clearer.  However, there are still a lot of observations near 0. This pattern persists if we look at really short times (less than 1 sec) in Figure 6 where by far the largest bin is still the very first.
+
+b) Calculate the MLE, $\hat{\lambda}=\bar{x}^{-1}$ from the data.
+```{r}
+hat.lambda <- 1/mean(selltimes)
+round(hat.lambda,5)
+```
+
+c) Use this estimate of $\lambda$ to divide the sample space into 10 intervals that will be big enough that the $\chi^2$ approximation will be appropriate.
+
+To choose the 10 intervals, we need to make sure that they have expectations greater than 5 under the null hypothesis that the distribution is exponential with parameter $\hat{\lambda}$= 0.01321. Bins with equal probability are often a good choice.
+```{r}
+brks <- c(qexp(seq(0,.9,by=0.1),hat.lambda),2400)
+cdf <- pexp(brks[c(-1,-11)],hat.lambda)
+expected <- 309*( c(cdf,1) - c(0,cdf))
+expected
+```
+
+d) Count the number of observations in each of those intervals. You can use the `hist`, `tabulate`, or
+`count` function.
+```{r}
+b <- hist(selltimes, breaks = brks, plot=F)
+round(b$breaks[c(-1, -11)], 3)
+b$counts
+```
+
+e) Perform the Chi-Square test. 
+
+```{r}
+x2 <- sum((b$counts - expected)^2/expected)
+round(x2,2)
+1 - pchisq(x2, 8)
+```
+This is significant. This data doesn’t look much like an exponential, as was suggested by our plots.
+
+f) Inspect the counts and the expected values and give some description of how the data looks different from an exponential distribution.
+
+In order to see where the big difference was between the expectations and the observed counts,we can look at the components of the $\chi^2$ statistic.
+```{r}
+round((b$counts - expected)^2/expected, 2)
+```
+The main contribution was from the first interval which was much larger than  expected. This indicates  (as  we  observed  in  the  histograms)  that  the  selling  times  are much more heavily weighted around 0 than an exponential distribution.  This sort of behavior is characteristic of process where many events happen close together followed by extended waits.
+
+g) What difference does it make if we used 25 or 100 intervals instead of 10? Experiment a little with different sets of intervals and report the results and whether they demonstrate anything different from the original 10-interval analysis.
+
+The  analysis  is  probably  more  accurate  with  more  bins, but in this  case  it  does  not  look very much different.
+```{r}
+# for 25 bins
+brks25 <- c(qexp(seq(0,0.96,by=1/25), hat.lambda), 2400)
+b25 <- hist(selltimes, breaks=brks25, plot=F)
+round(b25$breaks[c(-1,-26)], 1)
+cdf <- pexp(b25$breaks[c(-1,-26)], hat.lambda)
+expected25 <- 309*(c(cdf,1) - c(0, cdf))
+expected25
+x2b25 <- sum((b25$counts-expected25)^2/expected25)
+x2b25
+1 - pchisq(x2b25, 23)
+```
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+```{r}
+# for 100 bins
+brks100 <- c(qexp(seq(0,0.99,by=1/100),hat.lambda),2400)
+b100 <- hist(selltimes,breaks=brks100,plot=F)
+cdf <- pexp(b100$breaks[c(-1,-101)],hat.lambda)
+expected100 <- 309*( c(cdf,1) - c(0,cdf))
+x2b100 <- sum((b100$counts-expected100)^2/expected100)
+x2b100
+1 - pchisq(x2b100,98)
+```
+Unfortunately,  for  100  intervals,  the  expected  counts  are  no  longer  greater  than  5  so  the $\chi^2$ approximation is not appropriate. Most likely, for this, the 25 bins would be the best choice. It has more power because of the finer level of detail in the intervals while still having enough observations in each interval to justify the normal approximation.
 
 
 
